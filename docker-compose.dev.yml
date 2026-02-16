@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  dishlab-api:
+    build: .
+    container_name: dishlab-api
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mongo
+    env_file:
+      - .env.dev
+    restart: always
+
+  mongo:
+    image: mongo:6
+    container_name: dishlab-mongo
+    volumes:
+      - mongo_data:/data/db
+    restart: always
+
+volumes:
+  mongo_data:
