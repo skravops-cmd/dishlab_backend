@@ -1,42 +1,23 @@
 import os
+from pydantic import BaseSettings
 
 
-class BaseConfig:
-    """Shared config for all environments"""
+class BaseConfig(BaseSettings):
+    SECRET_KEY: str
+    JWT_SECRET_KEY: str
+    MONGO_URI: str
+    CORS_ORIGINS: str = "*"
 
-    SECRET_KEY = os.environ["SECRET_KEY"]
-    JWT_SECRET_KEY = os.environ["JWT_SECRET_KEY"]
-    MONGO_URI = os.environ["MONGO_URI"]
+    JWT_ACCESS_TOKEN_EXPIRES: int = 3600
+    MONGO_READ_ONLY: bool = False
 
-    # CORS
-    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
-
-    # JWT
-    JWT_ACCESS_TOKEN_EXPIRES = 3600  # 1 hour
-
-    # Flask
-    JSON_SORT_KEYS = False
+    class Config:
+        env_file = ".env"
 
 
 class DevConfig(BaseConfig):
-    """Local development"""
-
-    DEBUG = True
-    TESTING = False
-
-    # Dev is fully writable
     MONGO_READ_ONLY = False
 
 
 class StageConfig(BaseConfig):
-    """Staging (Azure Cosmos DB)"""
-
-    DEBUG = False
-    TESTING = False
-
-    # 🔒 IMPORTANT
     MONGO_READ_ONLY = True
-
-    # Example Azure Cosmos Mongo API URI
-    # mongodb://<user>:<password>@<account>.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb
-

@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_URL="http://localhost:5000"
+BASE_URL="http://localhost:8000"
 EMAIL="testuser$(date +%s)@dishlab.dev"
 PASSWORD="StrongPassword123!"
 
 echo "=============================="
 echo "🧪 DISHLAB API SMOKE TESTS"
 echo "=============================="
+
+expect_one_of() {
+  local status="$1"
+  shift
+  for code in "$@"; do
+    [[ "$status" == "$code" ]] && return 0
+  done
+  echo "❌ Unexpected status code: $status (expected: $*)"
+  exit 1
+}
 
 echo ""
 echo "1️⃣ Checking API availability (auth endpoint)..."
@@ -16,10 +26,8 @@ STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
   -H "Content-Type: application/json" \
   -d '{}')
 
-if [[ "$STATUS" != "400" && "$STATUS" != "401" ]]; then
-  echo "❌ API not reachable or unexpected status: $STATUS"
-  exit 1
-fi
+# FastAPI returns 422 for validation errors
+expect_one_of "$STATUS" 400 401 422
 echo "✅ API reachable"
 
 echo ""
@@ -38,11 +46,7 @@ REGISTER_STATUS=$(echo "$REGISTER_RESPONSE" | tail -n1)
 echo "HTTP $REGISTER_STATUS"
 echo "$REGISTER_BODY"
 
-if [[ "$REGISTER_STATUS" != "201" ]]; then
-  echo "❌ Registration failed"
-  exit 1
-fi
-
+expect_one_of "$REGISTER_STATUS" 200 201
 echo "$REGISTER_BODY" | jq .
 echo "✅ User registered"
 
@@ -56,10 +60,8 @@ DUPLICATE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
     \"password\": \"$PASSWORD\"
   }")
 
-if [[ "$DUPLICATE_STATUS" != "400" ]]; then
-  echo "❌ Duplicate registration not blocked"
-  exit 1
-fi
+# FastAPI typically uses 409 for conflicts
+expect_one_of "$DUPLICATE_STATUS" 400 409
 echo "✅ Duplicate registration blocked"
 
 echo ""
@@ -78,10 +80,7 @@ LOGIN_STATUS=$(echo "$LOGIN_RESPONSE" | tail -n1)
 echo "HTTP $LOGIN_STATUS"
 echo "$LOGIN_BODY"
 
-if [[ "$LOGIN_STATUS" != "200" ]]; then
-  echo "❌ Login failed"
-  exit 1
-fi
+expect_one_of "$LOGIN_STATUS" 200
 
 TOKEN=$(echo "$LOGIN_BODY" | jq -r '.access_token')
 
@@ -120,10 +119,8 @@ INVALID_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
     "youtube_link": "https://youtube.com/watch?v=alien"
   }')
 
-if [[ "$INVALID_STATUS" != "400" ]]; then
-  echo "❌ Invalid cuisine accepted"
-  exit 1
-fi
+# FastAPI validation = 422
+expect_one_of "$INVALID_STATUS" 400 422
 echo "✅ Invalid cuisine rejected"
 
 echo ""
@@ -147,11 +144,7 @@ echo "8️⃣ Unauthorized dashboard access should fail..."
 UNAUTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
   -X GET "$BASE_URL/api/receipts/dashboard")
 
-if [[ "$UNAUTH_STATUS" != "401" ]]; then
-  echo "❌ Unauthorized access allowed"
-  exit 1
-fi
-
+expect_one_of "$UNAUTH_STATUS" 401
 echo "✅ Unauthorized access blocked"
 
 echo ""
