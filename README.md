@@ -106,7 +106,7 @@ docker compose -f docker-compose.dev.yml up --build
 API will be available at:
 
 ```
-http://localhost:5000
+http://localhost:8000
 ```
 
 ---
@@ -132,7 +132,7 @@ Requirements:
 Swagger UI is available at:
 
 ```
-http://localhost:5000/apidocs
+http://localhost:8000/docs
 ```
 
 Authentication uses JWT Bearer tokens:
@@ -218,7 +218,6 @@ This script validates:
 
 * [ ] Azure App Service deployment
 * [ ] Application Insights logging
-* [ ] Health check endpoint
 * [ ] Metrics & monitoring
 
 ---

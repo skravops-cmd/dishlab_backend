@@ -2,8 +2,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, receipts
+from app.routers import auth, receipts, health
 from app.config import DevConfig, StageConfig
+
 import os
 
 env = os.getenv("FLASK_ENV", "development")
@@ -31,3 +32,4 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(receipts.router)
+app.include_router(health.router)
