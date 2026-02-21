@@ -20,5 +20,5 @@ class DevConfig(BaseConfig):
 
 
 class StageConfig(BaseConfig):
-    MONGO_READ_ONLY = True
+    MONGO_READ_ONLY = False
     CORS_ORIGINS = "https://purple-tree-030320a03.2.azurestaticapps.net"
