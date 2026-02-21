@@ -22,6 +22,16 @@ def authjwt_exception_handler(request: Request, exc: AuthJWTException):
         content={"detail": exc.message}
     )
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    # Log the error for debugging
+    print(f"Unhandled exception: {exc}")
+
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)}
+    )
+
 @app.get("/debug-cors")
 def debug_cors():
     return {

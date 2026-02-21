@@ -45,11 +45,14 @@ def dashboard(Authorize: AuthJWT = Depends()):
     user_id = Authorize.get_jwt_subject()
     db = get_db()
 
-    receipts = list(
-        db.receipts.find({"user_id": ObjectId(user_id)})
-        .sort("created_at", -1)
-        .limit(10)
-    )
+    try:
+        receipts = list(
+            db.receipts.find({"user_id": ObjectId(user_id)})
+            .sort("created_at", -1)
+            .limit(10)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
     return [{
         "id": str(r["_id"]),
