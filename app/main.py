@@ -22,6 +22,13 @@ def authjwt_exception_handler(request: Request, exc: AuthJWTException):
         content={"detail": exc.message}
     )
 
+@app.get("/debug-cors")
+def debug_cors():
+    return {
+        "env": os.getenv("FLASK_ENV"),
+        "cors_origins": settings.CORS_ORIGINS
+    }
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS.split(","),
