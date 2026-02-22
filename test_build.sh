@@ -26,7 +26,6 @@ STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
   -H "Content-Type: application/json" \
   -d '{}')
 
-# FastAPI returns 422 for validation errors
 expect_one_of "$STATUS" 400 401 422
 echo "✅ API reachable"
 
@@ -43,11 +42,7 @@ REGISTER_RESPONSE=$(curl -s -w "\n%{http_code}" \
 REGISTER_BODY=$(echo "$REGISTER_RESPONSE" | head -n1)
 REGISTER_STATUS=$(echo "$REGISTER_RESPONSE" | tail -n1)
 
-echo "HTTP $REGISTER_STATUS"
-echo "$REGISTER_BODY"
-
 expect_one_of "$REGISTER_STATUS" 200 201
-echo "$REGISTER_BODY" | jq .
 echo "✅ User registered"
 
 echo ""
@@ -60,7 +55,6 @@ DUPLICATE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
     \"password\": \"$PASSWORD\"
   }")
 
-# FastAPI typically uses 409 for conflicts
 expect_one_of "$DUPLICATE_STATUS" 400 409
 echo "✅ Duplicate registration blocked"
 
@@ -77,9 +71,6 @@ LOGIN_RESPONSE=$(curl -s -w "\n%{http_code}" \
 LOGIN_BODY=$(echo "$LOGIN_RESPONSE" | head -n1)
 LOGIN_STATUS=$(echo "$LOGIN_RESPONSE" | tail -n1)
 
-echo "HTTP $LOGIN_STATUS"
-echo "$LOGIN_BODY"
-
 expect_one_of "$LOGIN_STATUS" 200
 
 TOKEN=$(echo "$LOGIN_BODY" | jq -r '.access_token')
@@ -89,12 +80,13 @@ if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
   exit 1
 fi
 
-echo "✅ JWT token acquired"
 AUTH_HEADER="Authorization: Bearer $TOKEN"
+echo "✅ JWT token acquired"
 
 echo ""
 echo "5️⃣ Creating receipt (valid cuisine)..."
-curl -s -X POST "$BASE_URL/api/receipts/" \
+CREATE_RESPONSE=$(curl -s -w "\n%{http_code}" \
+  -X POST "$BASE_URL/api/receipts/" \
   -H "Content-Type: application/json" \
   -H "$AUTH_HEADER" \
   -d '{
@@ -102,8 +94,10 @@ curl -s -X POST "$BASE_URL/api/receipts/" \
     "cuisine": "Italian",
     "ingredients": "cheese, tomato, basil",
     "youtube_link": "https://youtube.com/watch?v=pizza"
-  }' | jq .
+  }')
 
+CREATE_STATUS=$(echo "$CREATE_RESPONSE" | tail -n1)
+expect_one_of "$CREATE_STATUS" 200 201
 echo "✅ Receipt created"
 
 echo ""
@@ -119,7 +113,6 @@ INVALID_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
     "youtube_link": "https://youtube.com/watch?v=alien"
   }')
 
-# FastAPI validation = 422
 expect_one_of "$INVALID_STATUS" 400 422
 echo "✅ Invalid cuisine rejected"
 
@@ -127,8 +120,6 @@ echo ""
 echo "7️⃣ Fetching dashboard..."
 DASHBOARD=$(curl -s -X GET "$BASE_URL/api/receipts/dashboard" \
   -H "$AUTH_HEADER")
-
-echo "$DASHBOARD" | jq .
 
 COUNT=$(echo "$DASHBOARD" | jq length)
 
@@ -148,7 +139,66 @@ expect_one_of "$UNAUTH_STATUS" 401
 echo "✅ Unauthorized access blocked"
 
 echo ""
+echo "9️⃣ Extracting receipt ID..."
+RECEIPT_ID=$(echo "$DASHBOARD" | jq -r '.[0].id')
+
+if [[ -z "$RECEIPT_ID" || "$RECEIPT_ID" == "null" ]]; then
+  echo "❌ Failed to extract receipt ID"
+  exit 1
+fi
+
+echo "✅ Using receipt ID: $RECEIPT_ID"
+
+echo ""
+echo "🔟 Deleting receipt (should succeed)..."
+DELETE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+  -X DELETE "$BASE_URL/api/receipts/$RECEIPT_ID" \
+  -H "$AUTH_HEADER")
+
+expect_one_of "$DELETE_STATUS" 200 204
+echo "✅ Receipt deleted"
+
+echo ""
+echo "1️⃣1️⃣ Deleting same receipt again (should 404)..."
+DELETE_AGAIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+  -X DELETE "$BASE_URL/api/receipts/$RECEIPT_ID" \
+  -H "$AUTH_HEADER")
+
+expect_one_of "$DELETE_AGAIN_STATUS" 404
+echo "✅ Second delete returned 404"
+
+echo ""
+echo "1️⃣2️⃣ Deleting with invalid ObjectId (should 400)..."
+INVALID_DELETE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+  -X DELETE "$BASE_URL/api/receipts/invalid-id" \
+  -H "$AUTH_HEADER")
+
+expect_one_of "$INVALID_DELETE_STATUS" 400
+echo "✅ Invalid ID rejected"
+
+echo ""
+echo "1️⃣3️⃣ Unauthorized delete attempt (should 401)..."
+UNAUTH_DELETE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+  -X DELETE "$BASE_URL/api/receipts/$RECEIPT_ID")
+
+expect_one_of "$UNAUTH_DELETE_STATUS" 401
+echo "✅ Unauthorized delete blocked"
+
+echo ""
+echo "1️⃣4️⃣ Verifying dashboard is empty..."
+NEW_DASHBOARD=$(curl -s -X GET "$BASE_URL/api/receipts/dashboard" \
+  -H "$AUTH_HEADER")
+
+NEW_COUNT=$(echo "$NEW_DASHBOARD" | jq length)
+
+if [[ "$NEW_COUNT" -ne 0 ]]; then
+  echo "❌ Receipt was not removed from dashboard"
+  exit 1
+fi
+
+echo "✅ Dashboard reflects deletion"
+
+echo ""
 echo "=============================="
 echo "🎉 ALL TESTS PASSED SUCCESSFULLY"
 echo "=============================="
-

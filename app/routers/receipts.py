@@ -61,3 +61,33 @@ def dashboard(Authorize: AuthJWT = Depends()):
         "ingredients": r["ingredients"],
         "youtube_link": r["youtube_link"],
     } for r in receipts]
+
+@router.delete("/{receipt_id}", status_code=200)
+def delete_receipt(
+    receipt_id: str,
+    Authorize: AuthJWT = Depends()
+):
+    Authorize.jwt_required()
+    ensure_writable()
+
+    user_id = Authorize.get_jwt_subject()
+    db = get_db()
+
+    # Validate ObjectId format
+    try:
+        receipt_obj_id = ObjectId(receipt_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid receipt id")
+
+    # Ensure receipt belongs to authenticated user
+    receipt = db.receipts.find_one({
+        "_id": receipt_obj_id,
+        "user_id": ObjectId(user_id)
+    })
+
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+
+    db.receipts.delete_one({"_id": receipt_obj_id})
+
+    return {"msg": "Receipt deleted successfully"}
