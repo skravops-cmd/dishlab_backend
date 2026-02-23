@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi_jwt_auth import AuthJWT
 from bson import ObjectId
 from datetime import datetime
+from pymongo import ReturnDocument
+
 from app.db import get_db, ensure_writable
 from app.models import ReceiptCreate, ReceiptUpdate
 
@@ -13,6 +15,18 @@ CUISINES = [
 ]
 
 
+def get_current_user_object_id(Authorize: AuthJWT) -> ObjectId:
+    user_id = Authorize.get_jwt_subject()
+
+    if not isinstance(user_id, str):
+        raise HTTPException(status_code=401, detail="Invalid token subject")
+
+    try:
+        return ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid user id")
+
+
 @router.post("/", status_code=201)
 def create_receipt(
     data: ReceiptCreate,
@@ -22,13 +36,13 @@ def create_receipt(
     ensure_writable()
 
     if data.cuisine not in CUISINES:
-        raise HTTPException(400, "Invalid cuisine")
+        raise HTTPException(status_code=400, detail="Invalid cuisine")
 
-    user_id = Authorize.get_jwt_subject()
     db = get_db()
+    user_obj_id = get_current_user_object_id(Authorize)
 
-    db.receipts.insert_one({
-        "user_id": ObjectId(user_id),
+    result = db.receipts.insert_one({
+        "user_id": user_obj_id,
         "name": data.name,
         "cuisine": data.cuisine,
         "ingredients": [i.strip() for i in data.ingredients.split(",")],
@@ -36,23 +50,21 @@ def create_receipt(
         "created_at": datetime.utcnow(),
     })
 
-    return {"msg": "Receipt created"}
+    return {"id": str(result.inserted_id)}
 
 
 @router.get("/dashboard")
 def dashboard(Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
-    user_id = Authorize.get_jwt_subject()
-    db = get_db()
 
-    try:
-        receipts = list(
-            db.receipts.find({"user_id": ObjectId(user_id)})
-            .sort("created_at", -1)
-            .limit(10)
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"DB error: {e}")
+    db = get_db()
+    user_obj_id = get_current_user_object_id(Authorize)
+
+    receipts = list(
+        db.receipts.find({"user_id": user_obj_id})
+        .sort("created_at", -1)
+        .limit(10)
+    )
 
     return [{
         "id": str(r["_id"]),
@@ -62,6 +74,7 @@ def dashboard(Authorize: AuthJWT = Depends()):
         "youtube_link": r["youtube_link"],
     } for r in receipts]
 
+
 @router.delete("/{receipt_id}", status_code=200)
 def delete_receipt(
     receipt_id: str,
@@ -70,24 +83,79 @@ def delete_receipt(
     Authorize.jwt_required()
     ensure_writable()
 
-    user_id = Authorize.get_jwt_subject()
     db = get_db()
+    user_obj_id = get_current_user_object_id(Authorize)
 
-    # Validate ObjectId format
     try:
         receipt_obj_id = ObjectId(receipt_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid receipt id")
 
-    # Ensure receipt belongs to authenticated user
-    receipt = db.receipts.find_one({
+    deleted = db.receipts.delete_one({
         "_id": receipt_obj_id,
-        "user_id": ObjectId(user_id)
+        "user_id": user_obj_id
     })
 
-    if not receipt:
+    if deleted.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Receipt not found")
 
-    db.receipts.delete_one({"_id": receipt_obj_id})
-
     return {"msg": "Receipt deleted successfully"}
+
+
+@router.put("/{receipt_id}", status_code=200)
+def update_receipt(
+    receipt_id: str,
+    data: ReceiptUpdate,
+    Authorize: AuthJWT = Depends()
+):
+    Authorize.jwt_required()
+    ensure_writable()
+
+    db = get_db()
+    user_obj_id = get_current_user_object_id(Authorize)
+
+    try:
+        receipt_obj_id = ObjectId(receipt_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid receipt id")
+
+    update_data = {}
+
+    if data.name is not None:
+        update_data["name"] = data.name
+
+    if data.cuisine is not None:
+        if data.cuisine not in CUISINES:
+            raise HTTPException(status_code=400, detail="Invalid cuisine")
+        update_data["cuisine"] = data.cuisine
+
+    if data.ingredients is not None:
+        update_data["ingredients"] = [
+            i.strip() for i in data.ingredients.split(",")
+        ]
+
+    if data.youtube_link is not None:
+        update_data["youtube_link"] = data.youtube_link
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields provided")
+
+    updated = db.receipts.find_one_and_update(
+        {
+            "_id": receipt_obj_id,
+            "user_id": user_obj_id
+        },
+        {"$set": update_data},
+        return_document=ReturnDocument.AFTER
+    )
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+
+    return {
+        "id": str(updated["_id"]),
+        "name": updated["name"],
+        "cuisine": updated["cuisine"],
+        "ingredients": updated["ingredients"],
+        "youtube_link": updated["youtube_link"],
+    }
