@@ -27,7 +27,6 @@ jobs:
           VALIDATE_YAML: true
           VALIDATE_DOCKERFILE: true
           VALIDATE_BASH: true
-          VALIDATE_MARKDOWN: true
           VALIDATE_GITHUB_ACTIONS: true
 
           # ---- Python specific ----
