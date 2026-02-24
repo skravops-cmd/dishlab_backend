@@ -2,7 +2,7 @@ name: Deploy Stage
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "stage" ]
 
 permissions:
   id-token: write
@@ -15,8 +15,7 @@ jobs:
     environment: stage
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Azure Login (OIDC)
         uses: azure/login@v1
@@ -26,8 +25,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Login to ACR
-        run: |
-          az acr login --name ${{ secrets.ACR_NAME }}
+        run: az acr login --name ${{ secrets.ACR_NAME }}
 
       - name: Build & Push Image
         run: |
