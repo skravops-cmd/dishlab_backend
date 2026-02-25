@@ -9,9 +9,10 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 
 @router.post("/register", status_code=201)
-def register(data: RegisterRequest):
-    db = get_db()
-
+def register(
+    data: RegisterRequest,
+    db=Depends(get_db)
+):
     if db.users.find_one({"email": data.email}):
         raise HTTPException(400, "User already exists")
 
@@ -25,8 +26,11 @@ def register(data: RegisterRequest):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: LoginRequest, Authorize: AuthJWT = Depends()):
-    db = get_db()
+def login(
+    data: LoginRequest,
+    Authorize: AuthJWT = Depends(),
+    db=Depends(get_db)
+):
     user = db.users.find_one({"email": data.email})
 
     if not user or not verify_password(data.password, user["password"]):

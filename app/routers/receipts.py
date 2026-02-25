@@ -28,9 +28,11 @@ def get_current_user_object_id(Authorize: AuthJWT) -> ObjectId:
 
 
 @router.post("/", status_code=201)
+
 def create_receipt(
     data: ReceiptCreate,
-    Authorize: AuthJWT = Depends()
+    Authorize: AuthJWT = Depends(),
+    db=Depends(get_db)
 ):
     Authorize.jwt_required()
     ensure_writable()
