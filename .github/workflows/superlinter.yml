@@ -2,9 +2,9 @@ name: Super-Linter
 
 on:
   push:
-    branches: [ "**" ]
+    branches: [ "master", "stage" ]
   pull_request:
-    branches: [ "**" ]
+    branches: [ "master", "stage" ]
 
 jobs:
   lint:
