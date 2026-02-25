@@ -1,7 +1,16 @@
+import os
+
+# -------------------------------------------------
+# Fake env vars for tests (BEFORE app import)
+# -------------------------------------------------
+os.environ.setdefault("SECRET_KEY", "test-secret")
+os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret")
+os.environ.setdefault("MONGO_URI", "mongodb://localhost:27017/testdb")
+os.environ.setdefault("FLASK_ENV", "development")
+
 import pytest
 import mongomock
 from fastapi.testclient import TestClient
-from fastapi_jwt_auth import AuthJWT
 
 from app.main import app
 from app.db import get_db
