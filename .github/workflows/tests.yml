@@ -28,3 +28,5 @@ jobs:
       - name: Run pytest
         run: |
           pytest -v
+          env:
+            PYTHONPATH: .
