@@ -5,6 +5,7 @@ import os
 # -------------------------------------------------
 os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret")
+os.environ.setdefault("AUTHJWT_SECRET_KEY", "test-jwt-secret")
 os.environ.setdefault("MONGO_URI", "mongodb://localhost:27017/testdb")
 os.environ.setdefault("FLASK_ENV", "development")
 
