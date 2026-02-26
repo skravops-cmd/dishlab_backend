@@ -41,9 +41,10 @@ jobs:
           VALIDATE_BASH: true
           VALIDATE_GITHUB_ACTIONS: true
 
-          PYTHON_VERSION: 3.13
+          PYTHON_VERSION: 3.11
           PYTHON_FLAKE8_CONFIG_FILE: .flake8
           DEFAULT_BRANCH: master
+          USE_GIT_DIFF: false
 
   # -------------------------------------------------
   # 2️⃣ TESTS
