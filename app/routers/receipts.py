@@ -28,11 +28,10 @@ def get_current_user_object_id(Authorize: AuthJWT) -> ObjectId:
 
 
 @router.post("/", status_code=201)
-
 def create_receipt(
     data: ReceiptCreate,
     Authorize: AuthJWT = Depends(),
-    db=Depends(get_db)
+    db=Depends(get_db),
 ):
     Authorize.jwt_required()
     ensure_writable()
@@ -40,7 +39,6 @@ def create_receipt(
     if data.cuisine not in CUISINES:
         raise HTTPException(status_code=400, detail="Invalid cuisine")
 
-    db = get_db()
     user_obj_id = get_current_user_object_id(Authorize)
 
     result = db.receipts.insert_one({
@@ -56,10 +54,12 @@ def create_receipt(
 
 
 @router.get("/dashboard")
-def dashboard(Authorize: AuthJWT = Depends()):
+def dashboard(
+    Authorize: AuthJWT = Depends(),
+    db=Depends(get_db),
+):
     Authorize.jwt_required()
 
-    db = get_db()
     user_obj_id = get_current_user_object_id(Authorize)
 
     receipts = list(
@@ -80,12 +80,12 @@ def dashboard(Authorize: AuthJWT = Depends()):
 @router.delete("/{receipt_id}", status_code=200)
 def delete_receipt(
     receipt_id: str,
-    Authorize: AuthJWT = Depends()
+    Authorize: AuthJWT = Depends(),
+    db=Depends(get_db),
 ):
     Authorize.jwt_required()
     ensure_writable()
 
-    db = get_db()
     user_obj_id = get_current_user_object_id(Authorize)
 
     try:
@@ -108,12 +108,12 @@ def delete_receipt(
 def update_receipt(
     receipt_id: str,
     data: ReceiptUpdate,
-    Authorize: AuthJWT = Depends()
+    Authorize: AuthJWT = Depends(),
+    db=Depends(get_db),
 ):
     Authorize.jwt_required()
     ensure_writable()
 
-    db = get_db()
     user_obj_id = get_current_user_object_id(Authorize)
 
     try:
@@ -143,10 +143,7 @@ def update_receipt(
         raise HTTPException(status_code=400, detail="No fields provided")
 
     updated = db.receipts.find_one_and_update(
-        {
-            "_id": receipt_obj_id,
-            "user_id": user_obj_id
-        },
+        {"_id": receipt_obj_id, "user_id": user_obj_id},
         {"$set": update_data},
         return_document=ReturnDocument.AFTER
     )
