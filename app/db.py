@@ -1,5 +1,6 @@
 from pymongo import MongoClient
 from app.config import DevConfig, StageConfig
+from fastapi import Depends
 import os
 
 _env = os.getenv("FLASK_ENV", "development")

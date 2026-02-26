@@ -1,6 +1,8 @@
 from fastapi import APIRouter
-from app.db import client
+from fastapi import Depends
 from app.config import DevConfig, StageConfig
+from app.db import get_db
+from pymongo.errors import PyMongoError
 import os
 
 router = APIRouter(prefix="/health", tags=["health"])
@@ -22,14 +24,13 @@ def health():
 
 
 @router.get("/ready")
-def readiness():
+def readiness(db=Depends(get_db)):
     """
     Readiness probe — dependencies are reachable
     """
     try:
-        # MongoDB ping
-        client.admin.command("ping")
-    except Exception as e:
+        db.client.admin.command("ping")
+    except PyMongoError as e:
         return {
             "status": "error",
             "dependency": "mongo",

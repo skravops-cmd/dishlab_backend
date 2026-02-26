@@ -2,9 +2,9 @@ name: Unit Tests
 
 on:
   pull_request:
-    branches: [ "master", "stage" ]
+    branches: [ "master","feature/unit-test-layout" ]
   push:
-    branches: [ "master", "stage" ]
+    branches: ["master","feature/unit-test-layout" ]
 
 jobs:
   tests:
@@ -17,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
@@ -26,5 +26,6 @@ jobs:
           pip install pytest
 
       - name: Run pytest
-        run: |
-          pytest -v
+        run: pytest -v
+        env:
+          PYTHONPATH: ${{ github.workspace }}
