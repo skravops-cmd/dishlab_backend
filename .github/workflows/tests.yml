@@ -2,9 +2,9 @@ name: Unit Tests
 
 on:
   pull_request:
-    branches: [ "feature/unit-test-layout" ]
+    branches: [ "master","feature/unit-test-layout" ]
   push:
-    branches: [  "feature/unit-test-layout" ]
+    branches: ["master","feature/unit-test-layout" ]
 
 jobs:
   tests:
