@@ -23,8 +23,8 @@ from app.security import hash_password
 @pytest.fixture(scope="function")
 def mongo_db():
     client = mongomock.MongoClient()
+    client.admin.command = lambda *args, **kwargs: {"ok": 1}
     return client.dishlab
-
 
 @pytest.fixture(scope="function")
 def client(mongo_db):
