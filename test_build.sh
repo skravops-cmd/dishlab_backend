@@ -83,27 +83,6 @@ create_receipt() {
     -d "$1"
 }
 
-R1=$(create_receipt '{
-  "name": "Pizza",
-  "cuisine": "Italian",
-  "ingredients": "cheese, tomato, basil",
-  "youtube_link": "https://youtube.com/watch?v=pizza"
-}')
-
-R2=$(create_receipt '{
-  "name": "Tacos",
-  "cuisine": "Mexican",
-  "ingredients": "beef, tomato, onion",
-  "youtube_link": "https://youtube.com/watch?v=tacos"
-}')
-
-R3=$(create_receipt '{
-  "name": "Paneer Curry",
-  "cuisine": "Indian",
-  "ingredients": "paneer, tomato, cream",
-  "youtube_link": "https://youtube.com/watch?v=paneer"
-}')
-
 echo "✅ Test receipts created"
 
 ############################################
