@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_jwt_auth import AuthJWT
 from bson import ObjectId
 from datetime import datetime
@@ -45,7 +45,7 @@ def create_receipt(
         "user_id": user_obj_id,
         "name": data.name,
         "cuisine": data.cuisine,
-        "ingredients": [i.strip() for i in data.ingredients.split(",")],
+        "ingredients": [i.strip().lower() for i in data.ingredients.split(",")],
         "youtube_link": data.youtube_link,
         "created_at": datetime.utcnow(),
     })
@@ -133,7 +133,7 @@ def update_receipt(
 
     if data.ingredients is not None:
         update_data["ingredients"] = [
-            i.strip() for i in data.ingredients.split(",")
+            i.strip().lower() for i in data.ingredients.split(",")
         ]
 
     if data.youtube_link is not None:
@@ -158,3 +158,49 @@ def update_receipt(
         "ingredients": updated["ingredients"],
         "youtube_link": updated["youtube_link"],
     }
+
+
+@router.get("/search")
+def search_receipts(
+    ingredients: str = Query(..., description="Comma separated ingredients"),
+    match_all: bool = False,
+    Authorize: AuthJWT = Depends(),
+    db=Depends(get_db),
+):
+    """
+    Search receipts by ingredient(s).
+    - match_all=False → matches ANY ingredient
+    - match_all=True  → matches ALL ingredients
+    """
+    Authorize.jwt_required()
+
+    user_obj_id = get_current_user_object_id(Authorize)
+
+    ingredient_list = [
+        i.strip().lower()
+        for i in ingredients.split(",")
+        if i.strip()
+    ]
+
+    if not ingredient_list:
+        raise HTTPException(status_code=400, detail="No ingredients provided")
+
+    if match_all:
+        ingredient_filter = {"$all": ingredient_list}
+    else:
+        ingredient_filter = {"$in": ingredient_list}
+
+    receipts = list(
+        db.receipts.find({
+            "user_id": user_obj_id,
+            "ingredients": ingredient_filter
+        }).sort("created_at", -1)
+    )
+
+    return [{
+        "id": str(r["_id"]),
+        "name": r["name"],
+        "cuisine": r["cuisine"],
+        "ingredients": r["ingredients"],
+        "youtube_link": r["youtube_link"],
+    } for r in receipts]
