@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_jwt_auth import AuthJWT
 from bson import ObjectId
@@ -10,8 +11,13 @@ from app.models import ReceiptCreate, ReceiptUpdate
 router = APIRouter(prefix="/api/receipts", tags=["Receipts"])
 
 CUISINES = [
-    "Italian", "Asian", "Mexican", "Indian",
-    "American", "French", "Mediterranean"
+    "Italian",
+    "Asian",
+    "Mexican",
+    "Indian",
+    "American",
+    "French",
+    "Mediterranean",
 ]
 
 
@@ -41,14 +47,16 @@ def create_receipt(
 
     user_obj_id = get_current_user_object_id(Authorize)
 
-    result = db.receipts.insert_one({
-        "user_id": user_obj_id,
-        "name": data.name,
-        "cuisine": data.cuisine,
-        "ingredients": [i.strip().lower() for i in data.ingredients.split(",")],
-        "youtube_link": data.youtube_link,
-        "created_at": datetime.utcnow(),
-    })
+    result = db.receipts.insert_one(
+        {
+            "user_id": user_obj_id,
+            "name": data.name,
+            "cuisine": data.cuisine.strip().lower(),
+            "ingredients": [i.strip().lower() for i in data.ingredients.split(",")],
+            "youtube_link": data.youtube_link,
+            "created_at": datetime.utcnow(),
+        }
+    )
 
     return {"id": str(result.inserted_id)}
 
@@ -63,18 +71,19 @@ def dashboard(
     user_obj_id = get_current_user_object_id(Authorize)
 
     receipts = list(
-        db.receipts.find({"user_id": user_obj_id})
-        .sort("created_at", -1)
-        .limit(10)
+        db.receipts.find({"user_id": user_obj_id}).sort("created_at", -1).limit(10)
     )
 
-    return [{
-        "id": str(r["_id"]),
-        "name": r["name"],
-        "cuisine": r["cuisine"],
-        "ingredients": r["ingredients"],
-        "youtube_link": r["youtube_link"],
-    } for r in receipts]
+    return [
+        {
+            "id": str(r["_id"]),
+            "name": r["name"],
+            "cuisine": r["cuisine"],
+            "ingredients": r["ingredients"],
+            "youtube_link": r["youtube_link"],
+        }
+        for r in receipts
+    ]
 
 
 @router.delete("/{receipt_id}", status_code=200)
@@ -93,10 +102,7 @@ def delete_receipt(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid receipt id")
 
-    deleted = db.receipts.delete_one({
-        "_id": receipt_obj_id,
-        "user_id": user_obj_id
-    })
+    deleted = db.receipts.delete_one({"_id": receipt_obj_id, "user_id": user_obj_id})
 
     if deleted.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Receipt not found")
@@ -145,7 +151,7 @@ def update_receipt(
     updated = db.receipts.find_one_and_update(
         {"_id": receipt_obj_id, "user_id": user_obj_id},
         {"$set": update_data},
-        return_document=ReturnDocument.AFTER
+        return_document=ReturnDocument.AFTER,
     )
 
     if not updated:
@@ -162,45 +168,62 @@ def update_receipt(
 
 @router.get("/search")
 def search_receipts(
-    ingredients: str = Query(..., description="Comma separated ingredients"),
+    ingredients: Optional[str] = Query(None, description="Comma separated ingredients"),
+    cuisine: Optional[str] = Query(None, description="Cuisine name"),
     match_all: bool = False,
     Authorize: AuthJWT = Depends(),
     db=Depends(get_db),
 ):
     """
-    Search receipts by ingredient(s).
-    - match_all=False → matches ANY ingredient
-    - match_all=True  → matches ALL ingredients
+    Search receipts by:
+    - ingredients (optional)
+    - cuisine (optional)
+    - match_all controls ingredient behavior
     """
-    Authorize.jwt_required()
 
+    Authorize.jwt_required()
     user_obj_id = get_current_user_object_id(Authorize)
 
-    ingredient_list = [
-        i.strip().lower()
-        for i in ingredients.split(",")
-        if i.strip()
+    # Base filter (always user-scoped)
+    query = {"user_id": user_obj_id}
+
+    # -------------------------
+    # Ingredient filter
+    # -------------------------
+    if ingredients:
+        ingredient_list = [
+            i.strip().lower() for i in ingredients.split(",") if i.strip()
+        ]
+
+        if not ingredient_list:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid ingredients provided",
+            )
+
+        if match_all:
+            query["ingredients"] = {"$all": ingredient_list}
+        else:
+            query["ingredients"] = {"$in": ingredient_list}
+
+    # -------------------------
+    # Cuisine filter
+    # -------------------------
+    if cuisine:
+        query["cuisine"] = cuisine.strip().lower()
+
+    # -------------------------
+    # Execute query
+    # -------------------------
+    receipts = list(db.receipts.find(query).sort("created_at", -1))
+
+    return [
+        {
+            "id": str(r["_id"]),
+            "name": r["name"],
+            "cuisine": r["cuisine"],
+            "ingredients": r["ingredients"],
+            "youtube_link": r["youtube_link"],
+        }
+        for r in receipts
     ]
-
-    if not ingredient_list:
-        raise HTTPException(status_code=400, detail="No ingredients provided")
-
-    if match_all:
-        ingredient_filter = {"$all": ingredient_list}
-    else:
-        ingredient_filter = {"$in": ingredient_list}
-
-    receipts = list(
-        db.receipts.find({
-            "user_id": user_obj_id,
-            "ingredients": ingredient_filter
-        }).sort("created_at", -1)
-    )
-
-    return [{
-        "id": str(r["_id"]),
-        "name": r["name"],
-        "cuisine": r["cuisine"],
-        "ingredients": r["ingredients"],
-        "youtube_link": r["youtube_link"],
-    } for r in receipts]
