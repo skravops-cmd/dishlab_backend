@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_jwt_auth import AuthJWT
 from bson import ObjectId
@@ -10,15 +10,31 @@ from app.models import ReceiptCreate, ReceiptUpdate
 
 router = APIRouter(prefix="/api/receipts", tags=["Receipts"])
 
+# Canonical lowercase cuisines
 CUISINES = [
-    "Italian",
-    "Asian",
-    "Mexican",
-    "Indian",
-    "American",
-    "French",
-    "Mediterranean",
+    "italian",
+    "asian",
+    "mexican",
+    "indian",
+    "american",
+    "french",
+    "mediterranean",
 ]
+
+
+# -------------------------
+# Helpers
+# -------------------------
+
+def normalize(value: str) -> str:
+    return value.strip().lower()
+
+
+def normalize_ingredients(raw: str) -> List[str]:
+    ingredients = [normalize(i) for i in raw.split(",") if i.strip()]
+    if not ingredients:
+        raise HTTPException(status_code=400, detail="Invalid ingredients provided")
+    return ingredients
 
 
 def get_current_user_object_id(Authorize: AuthJWT) -> ObjectId:
@@ -33,6 +49,10 @@ def get_current_user_object_id(Authorize: AuthJWT) -> ObjectId:
         raise HTTPException(status_code=401, detail="Invalid user id")
 
 
+# -------------------------
+# Create
+# -------------------------
+
 @router.post("/", status_code=201)
 def create_receipt(
     data: ReceiptCreate,
@@ -42,18 +62,21 @@ def create_receipt(
     Authorize.jwt_required()
     ensure_writable()
 
-    if data.cuisine not in CUISINES:
+    normalized_cuisine = normalize(data.cuisine)
+
+    if normalized_cuisine not in CUISINES:
         raise HTTPException(status_code=400, detail="Invalid cuisine")
 
+    ingredients = normalize_ingredients(data.ingredients)
     user_obj_id = get_current_user_object_id(Authorize)
 
     result = db.receipts.insert_one(
         {
             "user_id": user_obj_id,
-            "name": data.name,
-            "cuisine": data.cuisine.strip().lower(),
-            "ingredients": [i.strip().lower() for i in data.ingredients.split(",")],
-            "youtube_link": data.youtube_link,
+            "name": data.name.strip(),
+            "cuisine": normalized_cuisine,
+            "ingredients": ingredients,
+            "youtube_link": str(data.youtube_link),
             "created_at": datetime.utcnow(),
         }
     )
@@ -61,17 +84,22 @@ def create_receipt(
     return {"id": str(result.inserted_id)}
 
 
+# -------------------------
+# Dashboard
+# -------------------------
+
 @router.get("/dashboard")
 def dashboard(
     Authorize: AuthJWT = Depends(),
     db=Depends(get_db),
 ):
     Authorize.jwt_required()
-
     user_obj_id = get_current_user_object_id(Authorize)
 
     receipts = list(
-        db.receipts.find({"user_id": user_obj_id}).sort("created_at", -1).limit(10)
+        db.receipts.find({"user_id": user_obj_id})
+        .sort("created_at", -1)
+        .limit(10)
     )
 
     return [
@@ -85,6 +113,10 @@ def dashboard(
         for r in receipts
     ]
 
+
+# -------------------------
+# Delete
+# -------------------------
 
 @router.delete("/{receipt_id}", status_code=200)
 def delete_receipt(
@@ -102,13 +134,19 @@ def delete_receipt(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid receipt id")
 
-    deleted = db.receipts.delete_one({"_id": receipt_obj_id, "user_id": user_obj_id})
+    deleted = db.receipts.delete_one(
+        {"_id": receipt_obj_id, "user_id": user_obj_id}
+    )
 
     if deleted.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Receipt not found")
 
     return {"msg": "Receipt deleted successfully"}
 
+
+# -------------------------
+# Update
+# -------------------------
 
 @router.put("/{receipt_id}", status_code=200)
 def update_receipt(
@@ -130,20 +168,21 @@ def update_receipt(
     update_data = {}
 
     if data.name is not None:
-        update_data["name"] = data.name
+        update_data["name"] = data.name.strip()
 
     if data.cuisine is not None:
-        if data.cuisine not in CUISINES:
+        normalized_cuisine = normalize(data.cuisine)
+
+        if normalized_cuisine not in CUISINES:
             raise HTTPException(status_code=400, detail="Invalid cuisine")
-        update_data["cuisine"] = data.cuisine
+
+        update_data["cuisine"] = normalized_cuisine
 
     if data.ingredients is not None:
-        update_data["ingredients"] = [
-            i.strip().lower() for i in data.ingredients.split(",")
-        ]
+        update_data["ingredients"] = normalize_ingredients(data.ingredients)
 
     if data.youtube_link is not None:
-        update_data["youtube_link"] = data.youtube_link
+        update_data["youtube_link"] = str(data.youtube_link)
 
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields provided")
@@ -166,56 +205,49 @@ def update_receipt(
     }
 
 
+# -------------------------
+# Search
+# -------------------------
+
 @router.get("/search")
 def search_receipts(
-    ingredients: Optional[str] = Query(None, description="Comma separated ingredients"),
-    cuisine: Optional[str] = Query(None, description="Cuisine name"),
+    ingredients: Optional[str] = Query(
+        None, description="Comma separated ingredients"
+    ),
+    cuisine: Optional[str] = Query(
+        None, description="Cuisine name"
+    ),
     match_all: bool = False,
     Authorize: AuthJWT = Depends(),
     db=Depends(get_db),
 ):
-    """
-    Search receipts by:
-    - ingredients (optional)
-    - cuisine (optional)
-    - match_all controls ingredient behavior
-    """
-
     Authorize.jwt_required()
     user_obj_id = get_current_user_object_id(Authorize)
 
-    # Base filter (always user-scoped)
     query = {"user_id": user_obj_id}
 
-    # -------------------------
     # Ingredient filter
-    # -------------------------
     if ingredients:
-        ingredient_list = [
-            i.strip().lower() for i in ingredients.split(",") if i.strip()
-        ]
-
-        if not ingredient_list:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid ingredients provided",
-            )
+        ingredient_list = normalize_ingredients(ingredients)
 
         if match_all:
             query["ingredients"] = {"$all": ingredient_list}
         else:
             query["ingredients"] = {"$in": ingredient_list}
 
-    # -------------------------
     # Cuisine filter
-    # -------------------------
     if cuisine:
-        query["cuisine"] = cuisine.strip().lower()
+        normalized_cuisine = normalize(cuisine)
 
-    # -------------------------
-    # Execute query
-    # -------------------------
-    receipts = list(db.receipts.find(query).sort("created_at", -1))
+        if normalized_cuisine not in CUISINES:
+            raise HTTPException(status_code=400, detail="Invalid cuisine")
+
+        query["cuisine"] = normalized_cuisine
+
+    receipts = list(
+        db.receipts.find(query)
+        .sort("created_at", -1)
+    )
 
     return [
         {
